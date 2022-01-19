@@ -10,14 +10,14 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 
-
-cred = credentials.Certificate("keys.json")
-firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# Parsing and escaping latex reserved chars
-def strFormatter(text):
+
+def strFormatter(text: str) -> str:
+    """Return a string by parsing and escaping latex reserved chars"""
+
     text = str(text)
+
     for x in range(len(text)):
         if x == 0 and text[x] == "&":
             text = "\\" + text
@@ -52,9 +52,8 @@ def strFormatter(text):
     return text
 
 
-# Function for single pdf generation
-# Parameter - Dictionary with all values for a single student
-def make_pdf(s_dict):
+def make_pdf(s_dict: dict) -> None:
+    """Single PDF generation"""
 
     # Read all the templates in memory
     main_template = r""""""  # Append all sub_templates to this at last stage
@@ -241,82 +240,106 @@ def make_pdf(s_dict):
     cleanUp(s_dict["sapID"], s_dict["course"], s_dict["graduationYear"])
 
 
-# File organization
 def cleanUp(sap, batch, gradYear):
+    """Remove residual files post PDF generation"""
+
     batchDir = f"{batch}-{gradYear}"
+
     if not (os.path.exists("pdf")):
         os.mkdir("pdf")
+
     if not (os.path.exists(os.path.join("pdf", batchDir))):
         os.mkdir(os.path.join("pdf", batchDir))
+
     files = [
         f
         for f in os.listdir(".")
         if os.path.isfile(f) and (f.endswith(".pdf") or f.endswith(".tex"))
     ]
+
     for stuFile in files:
         shutil.move(stuFile, os.path.join("pdf", batchDir))
 
 
-def createAll():
+def createAll() -> None:
+    """Generate PDF for all documents"""
+
     docs = db.collection_group("students").get()
+
     for doc in docs:
         py_dict = doc.to_dict()
         make_pdf(py_dict)
 
 
-def createBatch(batch="None"):
+def createBatch(batch: str = "None"):
+    """Generate PDF for all students in a batch"""
+
     docs = db.collection("student").document(f"{batch}").collection("students").get()
+
     for doc in docs:
         py_dict = doc.to_dict()
         make_pdf(py_dict)
 
 
-def createOne(sapid="0000"):
+def createOne(sapid: str = "0000") -> None:
+    """Generate PDF for a single student"""
+
     docs = db.collection_group("students").where("sapID", "==", str(sapid)).stream()
+
     for doc in docs:
         py_dict = doc.to_dict()
         make_pdf(py_dict)
+
+
+def main() -> None:
+    fire.Fire()
+
+    cred = credentials.Certificate("keys.json")
+    firebase_admin.initialize_app(cred)
+
+    # Sending Email
+    docs = db.collection_group("students").get()
+
+    for doc in docs:
+        email01 = doc.to_dict()["email"]
+        name01 = doc.to_dict()["firstName"]
+
+        msg = EmailMessage()
+        msg["Subject"] = "CV"
+        msg["From"] = EMAIL_ADDRESS
+        # msg['To'] = email01
+        msg["To"] = "ritish20mohapatra@gmail.com"
+        msg.set_content("Your CV is Here:")
+
+        msg.add_alternative(
+            """\
+            <!DOCTYPE html>
+            <html>
+                <body>
+                    <h3 >Here's your generated CV.
+                Regards, 
+                Placement committee, STME NMIMS Navi Mumba</h3>
+                </body>
+            </html>    
+            """,
+            subtype="html",
+        )
+
+        with open(f"pdf/{name01}.pdf", "rb") as f:
+            file_data = f.read()
+            file_name = f.name
+
+        msg.add_attachment(
+            file_data,
+            maintype="application",
+            subtype="octet-stream",
+            filename=file_name,
+        )
+
+        # with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+        #     smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        #     smtp.send_message(msg)
 
 
 if __name__ == "__main__":
-    fire.Fire()
-
-
-# Sending Email
-docs = db.collection_group("students").get()
-for doc in docs:
-    email01 = doc.to_dict()["email"]
-    name01 = doc.to_dict()["firstName"]
-
-    msg = EmailMessage()
-    msg["Subject"] = "CV"
-    msg["From"] = EMAIL_ADDRESS
-    # msg['To'] = email01
-    msg["To"] = "ritish20mohapatra@gmail.com"
-    msg.set_content("Your CV is Here:")
-
-    msg.add_alternative(
-        """\
-		<!DOCTYPE html>
-		<html>
-			<body>
-				<h3 >Here's your generated CV.
-            Regards, 
-            Placement committee, STME NMIMS Navi Mumba</h3>
-			</body>
-		</html>    
-		""",
-        subtype="html",
-    )
-
-    with open(f"pdf/{name01}.pdf", "rb") as f:
-        file_data = f.read()
-        file_name = f.name
-
-    msg.add_attachment(
-        file_data, maintype="application", subtype="octet-stream", filename=file_name
-    )
-
-    # with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-    #     smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-    #     smtp.send_message(msg)
+    main()
