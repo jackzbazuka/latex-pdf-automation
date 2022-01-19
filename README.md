@@ -10,7 +10,7 @@ A python script to automate generation of pdfs in latex template. You might need
 
 ### CLI
 
-There are three possible CLI arguments. This script uses `fire` package for CLI arguments.
+There are three CLI arguments. This script uses `fire` package for CLI arguments.
 
 - `createOne` - For generating pdf for a single user (eg: `python script.py createOne userID`)
 
